@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>즐거운 크리스마스</title>
+    <!-- 산타 파비콘 (URL 인코딩해서 에디터 경고 방지) -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50%25' x='50%25' dominant-baseline='middle' text-anchor='middle' font-size='52'%3E🎅%3C/text%3E%3C/svg%3E">
+    <style>
+        body {
+            background-color: #000;
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        /* 61열 26행의 완벽한 그리드 시스템 구축 */
+        #screen {
+            display: grid;
+            grid-template-columns: repeat(61, 10px); /* 한 칸당 10px 고정 */
+            grid-template-rows: repeat(26, 18px);    /* 한 줄당 18px 고정 */
+            background-color: #000;
+            font-weight: bold;
+            font-size: 16px;
+            user-select: none;
+        }
+
+        .char {
+            width: 10px;
+            height: 18px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        /* 왼쪽 상단 스피커 버튼 */
+        #audio-toggle {
+            position: fixed;
+            top: 8px;
+            left: 8px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 18px;
+            z-index: 1000;
+        }
+
+        #audio-toggle.muted {
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+
+<button id="audio-toggle" aria-label="배경 음악 토글">🔊</button>
+<audio id="bgm" src="lhIvW.mp3"></audio>
+
+<div id="screen"></div>
+
+<script>
+    // 61은 홀수이므로 30번 인덱스가 정확한 정중앙이 됩니다.
+    const width = 61; 
+    const height = 26;
+    const flakes = ['*', '.', '❄', '•'];
+    const sky_colors = ['#87afff', '#afd7ff', '#d7ffff'];
+    const light_colors = ['#ff0000', '#ffff00', '#00ff00'];
+    
+    const tree_design = [
+        "*",
+        "***",
+        "*****",
+        "*******",
+        "*********",
+        "***********",
+        "*************",
+        "|||",
+        "|||"
+    ];
+
+    let snow = [];
+    let ground = new Array(width).fill(1);
+    let star_pulse = 0;
+
+    function createFlake() {
+        return {
+            x: Math.floor(Math.random() * width),
+            y: 0,
+            char: flakes[Math.floor(Math.random() * flakes.length)],
+            speed: Math.random() < 0.66 ? 1 : 2,
+            wind: Math.floor(Math.random() * 3) - 1,
+            color: sky_colors[Math.floor(Math.random() * sky_colors.length)]
+        };
+    }
+
+    function updateSnow() {
+        if (Math.random() < 0.5) snow.push(createFlake());
+        for (let i = snow.length - 1; i >= 0; i--) {
+            let f = snow[i];
+            f.y += f.speed;
+            f.x = (f.x + f.wind + width) % width;
+            if (f.y >= height - ground[f.x]) {
+                ground[f.x] = Math.min(ground[f.x] + 1, height - 1);
+                snow.splice(i, 1);
+            }
+        }
+    }
+
+    function draw() {
+        // 1. 버퍼 초기화 (공백)
+        let buffer = Array.from({ length: height }, () => 
+            Array(width).fill(' ')
+        );
+        
+        // 색상 정보를 담을 별도의 버퍼
+        let colorBuffer = Array.from({ length: height }, () => 
+            Array(width).fill('')
+        );
+
+        // 2. 트리 그리기
+        const tree_start_y = height - tree_design.length - 3;
+        
+        tree_design.forEach((line, i) => {
+            const line_width = line.length;
+            const start_x = (width - line_width) / 2; // (61-1)/2 = 30
+            
+            for (let j = 0; j < line_width; j++) {
+                let y = tree_start_y + i;
+                let x = start_x + j;
+                let char = line[j];
+
+                if (y >= 0 && y < height && x >= 0 && x < width) {
+                    if (i === 0 && char === "*") {
+                        buffer[y][x] = "★";
+                        colorBuffer[y][x] = light_colors[star_pulse % light_colors.length];
+                    } else if (char === "*" && Math.random() < 0.15) {
+                        buffer[y][x] = "*";
+                        colorBuffer[y][x] = light_colors[Math.floor(Math.random() * light_colors.length)];
+                    } else if (char === "|") {
+                        buffer[y][x] = "|";
+                        colorBuffer[y][x] = "#8B4513";
+                    } else {
+                        buffer[y][x] = char;
+                        colorBuffer[y][x] = "#0f8a3c";
+                    }
+                }
+            }
+        });
+
+        // 3. 눈 그리기
+        snow.forEach(f => {
+            if (f.y >= 0 && f.y < height && f.x >= 0 && f.x < width) {
+                buffer[f.y][f.x] = f.char;
+                colorBuffer[f.y][f.x] = f.color;
+            }
+        });
+
+        // 4. 그리드 방식으로 렌더링 (태그 간 공백 발생 원천 차단)
+        const screen = document.getElementById('screen');
+        let htmlContent = "";
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const char = buffer[y][x];
+                const color = colorBuffer[y][x];
+                htmlContent += `<div class="char" style="color:${color}">${char}</div>`;
+            }
+        }
+        screen.innerHTML = htmlContent;
+
+        updateSnow();
+        star_pulse++;
+    }
+
+    setInterval(draw, 100);
+
+    // 오디오 자동 재생 및 토글 버튼 제어 + 콘솔 아스키 아트
+    window.addEventListener('DOMContentLoaded', () => {
+        const audio = document.getElementById('bgm');
+        const btn = document.getElementById('audio-toggle');
+
+        if (audio && btn) {
+            // 50초부터 시작
+            audio.currentTime = 50;
+
+            // 자동 재생 시도
+            const playAudio = () => {
+                audio.play().then(() => {
+                    btn.classList.remove('muted');
+                    btn.textContent = '🔊';
+                }).catch(() => {
+                    // 자동 재생이 막힌 경우: 버튼을 눌러야 재생됨
+                    btn.classList.add('muted');
+                    btn.textContent = '🔇';
+                });
+            };
+
+            playAudio();
+
+            // 토글 버튼 동작
+            btn.addEventListener('click', () => {
+                if (audio.paused) {
+                    if (audio.currentTime < 50) audio.currentTime = 50;
+                    audio.play();
+                    btn.classList.remove('muted');
+                    btn.textContent = '🔊';
+                } else {
+                    audio.pause();
+                    btn.classList.add('muted');
+                    btn.textContent = '🔇';
+                }
+            });
+        }
+
+        const format = [
+            "%c             Y     Y",
+            "            Y Y   Y Y",
+            "              |   |",
+            "%c            .-''''-.",
+            "           (  o  o  )",
+            "           (   ^    )",
+            "           (       )",
+            "            '-----'",
+            "%c           (   ●   )",
+            "",
+            "%c  M E R R Y   C H R I S T M A S "
+        ].join("\n");
+
+        const antlersStyle = [
+            "color:#8B4513",
+            "font-family: monospace",
+            "font-size:12px",
+            "font-weight:bold"
+        ].join(";");
+
+        const faceStyle = [
+            "color:#D2B48C",
+            "font-family: monospace",
+            "font-size:12px",
+            "font-weight:bold"
+        ].join(";");
+
+        const noseStyle = [
+            "color:#FF0000",
+            "font-family: monospace",
+            "font-size:12px",
+            "font-weight:bold"
+        ].join(";");
+
+        const messageStyle = [
+            "color:#006400",
+            "font-family: monospace",
+            "font-size:12px",
+            "font-weight:bold"
+        ].join(";");
+
+        console.log(format, antlersStyle, faceStyle, noseStyle, messageStyle);
+    });
+</script>
+
+</body>
+</html>
