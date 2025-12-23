@@ -122,12 +122,14 @@
   function bindGlobalEvents() {
     // 배경 클릭 시 작성 버튼 표시 (기존 더블클릭 로직 대체)
     document.addEventListener('click', (e) => {
-      // 메모나 모달 내부, 스피커 버튼, 툴팁 클릭은 무시
+      // 메모나 모달 내부, 스피커 버튼, 메모 토글 버튼, 툴팁 클릭은 무시
       if (e.target.closest('.memo') || 
           e.target.closest('.modal') || 
           e.target.closest('.create-btn-tooltip') ||
           e.target.closest('#audio-toggle') ||
-          e.target.id === 'audio-toggle') return;
+          e.target.closest('#memo-toggle') ||
+          e.target.id === 'audio-toggle' ||
+          e.target.id === 'memo-toggle') return;
       
       showCreateTooltip(e.clientX, e.clientY);
     });
@@ -263,8 +265,8 @@
       // 좌표 % 값 강제 보정 (이전 데이터 px 값이면 중앙, 소수점 2자리)
       let xx = Number(memo.pos_x);
       let yy = Number(memo.pos_y);
-      if (isNaN(xx) || xx < 1 || xx > 99) xx = 50;
-      if (isNaN(yy) || yy < 1 || yy > 99) yy = 45;
+      if (isNaN(xx) || xx < 0 || xx > 100) xx = 50;
+      if (isNaN(yy) || yy < 0 || yy > 100) yy = 45;
       xx = roundPos(xx);
       yy = roundPos(yy);
       el.style.left = `calc(${xx}% )`;
@@ -319,8 +321,8 @@
 
     let xx = Number(memo.pos_x);
     let yy = Number(memo.pos_y);
-    if (isNaN(xx) || xx < 1 || xx > 99) xx = 50;
-    if (isNaN(yy) || yy < 1 || yy > 99) yy = 45;
+    if (isNaN(xx) || xx < 0 || xx > 100) xx = 50;
+    if (isNaN(yy) || yy < 0 || yy > 100) yy = 45;
     // 경계 보정 적용
     const constrained = constrainMemoPosition(el, xx, yy);
     el.style.left = `calc(${constrained.x}% )`;
@@ -481,8 +483,8 @@
     }
     // 위치 px → % 변환 (소수점 2자리)
     let layerRect = memoLayer.getBoundingClientRect();
-    let xP = roundPos(Math.min(Math.max(((pendingPosition.x - layerRect.left ) / layerRect.width) * 100, 1), 99));
-    let yP = roundPos(Math.min(Math.max(((pendingPosition.y - layerRect.top ) / layerRect.height) * 100, 1), 99));
+    let xP = roundPos(Math.min(Math.max(((pendingPosition.x - layerRect.left ) / layerRect.width) * 100, 0), 99));
+    let yP = roundPos(Math.min(Math.max(((pendingPosition.y - layerRect.top ) / layerRect.height) * 100, 0), 99));
     if (currentMode === 'create') {
       await createMemo(content, author, { x: xP, y: yP });
     }

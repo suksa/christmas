@@ -26,6 +26,20 @@
                 grid-template-columns: repeat(61, 5vw);
                 grid-template-rows: repeat(26, 4vw);
             }
+            #audio-toggle {
+                width: 28px;
+                height: 28px;
+                font-size: 16px;
+                top: 4px;
+                left: 4px;
+            }
+            #memo-toggle {
+                width: 28px;
+                height: 28px;
+                font-size: 16px;
+                top: 4px;
+                left: 36px; /* 스피커 버튼 우측 */
+            }
             #memo-hint {
                 font-size: 11px;
                 padding: 5px 6px;
@@ -108,12 +122,50 @@
             opacity: 0.5;
         }
 
+        /* 메모 숨기기 버튼 */
+        #memo-toggle {
+            position: fixed;
+            top: 8px;
+            left: 48px; /* 스피커 버튼 우측 */
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 18px;
+            z-index: 1000;
+            transition: all 0.2s;
+            backdrop-filter: blur(2px);
+        }
+
+        #memo-toggle:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+
+        #memo-toggle.active {
+            background: rgba(255, 255, 255, 0.9);
+            color: #000;
+        }
+
+        /* 메모 숨기기 모드 */
+        body.memos-hidden #memo-layer {
+            opacity: 0;
+            pointer-events: none;
+        }
+
         /* 메모 레이어와 스타일 */
         #memo-layer {
             position: fixed;
             inset: 0;
             pointer-events: none;
             z-index: 200;
+            transition: opacity 0.3s ease;
         }
 
         #memo-hint {
@@ -477,6 +529,7 @@
 <body>
 
 <button id="audio-toggle" aria-label="배경 음악 토글">🔊</button>
+<button id="memo-toggle" aria-label="메모 숨기기" title="메모 숨기기">👁️</button>
 <audio id="bgm" src="lhIvW.mp3"></audio>
 
 <div id="screen"></div>
@@ -807,9 +860,22 @@
         ].join(";");
         
         console.log(doveMessage, doveStyle1, doveStyle2, doveStyle3, doveStyle4);
+
+        // 메모 숨기기 버튼 이벤트
+        const memoToggleBtn = document.getElementById('memo-toggle');
+        if (memoToggleBtn) {
+            memoToggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // 메모 작성 툴팁 방지
+                document.body.classList.toggle('memos-hidden');
+                const isHidden = document.body.classList.contains('memos-hidden');
+                memoToggleBtn.textContent = isHidden ? '🙈' : '👁️';
+                memoToggleBtn.title = isHidden ? '메모 보이기' : '메모 숨기기';
+                memoToggleBtn.classList.toggle('active', isHidden);
+            });
+        }
     });
 </script>
-<script src="memo.js"></script>
+<script src="memo.js?v=20241224_4"></script>
 
 </body>
 </html>
