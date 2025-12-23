@@ -3,9 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <title>즐거운 크리스마스</title>
+    <meta name="description" content="소원을말해바">
+    <!-- Open Graph 메타 태그 -->
+    <meta property="og:title" content="즐거운 크리스마스">
+    <meta property="og:description" content="소원을 말해바🕊️🕊️🕊️">
+    <meta property="og:image" content="./unnamed.jpg">
+    <meta property="og:type" content="website">
     <!-- 산타 파비콘 (URL 인코딩해서 에디터 경고 방지) -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50%25' x='50%25' dominant-baseline='middle' text-anchor='middle' font-size='52'%3E🎅%3C/text%3E%3C/svg%3E">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
+        html {
+            box-sizing: border-box;
+        }
+        @media (max-width: 600px) {
+            body {
+                font-size: 13px;
+                padding: 0;
+                height: 100dvh;
+            }
+            #screen {
+                grid-template-columns: repeat(61, 5vw);
+                grid-template-rows: repeat(26, 4vw);
+            }
+            #memo-hint {
+                font-size: 11px;
+                padding: 5px 6px;
+                border-radius: 6px;
+                top: 4px;
+                right: 4px;
+                z-index: 1010;
+            }
+            .memo {
+                min-width: 80px;
+                max-width: 97vw;
+                padding: 6vw 2vw 5vw 2vw;
+                font-size: 14px;
+                border-radius: 10px;
+            }
+            .modal-card {
+                width: min(99vw, 360px);
+                padding: 10px 5vw 12px 5vw;
+                border-radius: 10px;
+            }
+            .modal-header { font-size: 14px; gap: 4px; }
+            .memo-content { font-size: 14px; padding: 2vw 3vw; }
+            .memo-date, .memo-footer {
+                font-size: 11px;
+                padding: 2px 6px;
+            }
+        }
         body {
             background-color: #000;
             color: #fff;
@@ -26,6 +73,7 @@
             font-weight: bold;
             font-size: 16px;
             user-select: none;
+            pointer-events: none; /* 클릭 이벤트 통과시켜 메모 레이어가 받도록 */
         }
 
         .char {
@@ -59,6 +107,369 @@
         #audio-toggle.muted {
             opacity: 0.5;
         }
+
+        /* 메모 레이어와 스타일 */
+        #memo-layer {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 200;
+        }
+
+        #memo-hint {
+            position: fixed;
+            top: 8px;
+            right: 8px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.4;
+            z-index: 1001;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+        }
+
+        .memo {
+            position: absolute;
+            min-width: 140px;
+            max-width: 220px;
+            color: #25120c;
+            padding: 20px 14px 14px; /* 눈 장식을 위해 상단 여백 확보 */
+            border-radius: 12px;
+            
+            /* CSS Variables applied from JS */
+            background-color: var(--memo-bg, #fff);
+            border: 2px solid var(--memo-border, #ccc);
+            
+            /* 크리스마스 질감: 은은한 사선 스트라이프 */
+            background-image: repeating-linear-gradient(
+                45deg,
+                rgba(255, 255, 255, 0.5),
+                rgba(255, 255, 255, 0.5) 10px,
+                transparent 10px,
+                transparent 20px
+            );
+
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35), 
+                        0 4px 10px rgba(0, 0, 0, 0.2),
+                        inset 0 0 0 1px rgba(255,255,255,0.4);
+            
+            pointer-events: auto;
+            cursor: grab;
+            user-select: text;
+            backdrop-filter: blur(3px);
+            overflow: visible; /* 눈 장식이 보이도록 */
+            z-index: 200;
+            
+            /* 애니메이션 */
+            transition: left 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), 
+                       top 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
+                       transform 0.3s ease,
+                       box-shadow 0.3s ease,
+                       z-index 0s;
+            animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+            transform-origin: center center;
+        }
+
+        /* 메모 상단 눈 쌓인 효과 */
+        .memo::after {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: -2px;
+            right: -2px;
+            height: 16px;
+            background: 
+                radial-gradient(12px 12px at 15% 100%, #ffffff 50%, transparent 51%) 0 -4px,
+                radial-gradient(14px 14px at 50% 100%, #ffffff 50%, transparent 51%) 0 -4px,
+                radial-gradient(12px 12px at 85% 100%, #ffffff 50%, transparent 51%) 0 -4px;
+            background-size: 33% 20px;
+            background-repeat: repeat-x;
+            filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        /* 핀 장식 (선택) */
+        .memo::before {
+            content: '';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #ff6b6b, #c0392b);
+            box-shadow: 1px 1px 4px rgba(0,0,0,0.4);
+            z-index: 3;
+        }
+
+        /* 호버 시 강조 */
+        .memo:hover {
+            z-index: 500 !important;
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5), 
+                        0 6px 16px rgba(0, 0, 0, 0.3),
+                        0 0 15px var(--memo-accent, rgba(255,255,255,0.5)); /* 글로우 효과 */
+            transform: scale(1.02) rotate(0deg); /* 호버시 살짝 정방향으로 */
+        }
+
+        /* 드래그 중일 때는 반응 즉각적으로 (애니메이션 끔) */
+        .memo.dragging {
+            transition: none !important;
+            cursor: grabbing;
+            z-index: 1000 !important;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 
+                        0 8px 20px rgba(0, 0, 0, 0.4),
+                        0 0 0 4px rgba(255, 255, 255, 0.6) inset;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0) rotate(-5deg); opacity: 0; }
+            60% { transform: scale(1.08) rotate(2deg); opacity: 1; }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+
+
+        .memo-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .memo-chip {
+            background: linear-gradient(135deg, var(--memo-chip), var(--memo-accent));
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 999px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .memo-date {
+            font-size: 11px;
+            color: #8b3a2f;
+            /* background: rgba(255, 255, 255, 0.65); */
+            padding: 4px 8px;
+            border-radius: 8px;
+        }
+
+        .memo-content {
+            white-space: pre-wrap;
+            font-size: 14px;
+            line-height: 1.4;
+            padding: 8px 10px;
+            background: rgba(255, 255, 255, 0.75);
+            border-radius: 10px;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.9);
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .memo-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .memo-btn {
+            border: none;
+            background: linear-gradient(135deg, #2d9c5b, #2fbf71);
+            color: #fff;
+            border-radius: 8px;
+            padding: 6px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(47, 191, 113, 0.35);
+        }
+
+        .memo-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 14px rgba(47, 191, 113, 0.45);
+        }
+
+        .memo-footer {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #b02a37;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 4px 8px;
+            border-radius: 8px;
+        }
+
+        /* 모달 */
+        .hidden { display: none!important; }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            z-index: 1200;
+        }
+
+        .modal-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(3px);
+        }
+
+        .modal-card {
+            position: relative;
+            width: min(420px, 90vw);
+            background: linear-gradient(145deg, #1f1a2d, #271f3d);
+            color: #fff;
+            border-radius: 16px;
+            padding: 18px 18px 16px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 3px rgba(255, 255, 255, 0.1);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .modal-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .modal-close {
+            border: none;
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .modal-close:hover { background: rgba(255, 255, 255, 0.2); }
+
+        .modal-body label {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #dcd6ff;
+        }
+
+        .modal-body input,
+        .modal-body textarea {
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            font-size: 14px;
+        }
+
+        .modal-body textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .modal-btn {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .modal-btn.secondary {
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+        }
+
+        .modal-btn.primary {
+            background: linear-gradient(135deg, #e63946, #ff6b6b);
+            color: #fff;
+            box-shadow: 0 8px 18px rgba(230, 57, 70, 0.45);
+        }
+
+        .modal-btn.primary:hover { transform: translateY(-1px); }
+        .create-btn-tooltip {
+            position: fixed;
+            background: linear-gradient(135deg, #ff6b6b, #ee5253);
+            color: #fff;
+            padding: 8px 12px 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(238, 82, 83, 0.4);
+            z-index: 2000;
+            transform-origin: center bottom;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .create-btn-tooltip:hover {
+            transform: scale(1.05);
+            background: linear-gradient(135deg, #ff7675, #ff6b6b);
+        }
+
+        .tooltip-text {
+            cursor: pointer;
+        }
+
+        .tooltip-close {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: #fff;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            line-height: 1;
+            transition: background 0.2s;
+        }
+
+        .tooltip-close:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        @keyframes popTooltip {
+            0% { transform: scale(0) translateY(10px); opacity: 0; }
+            100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
     </style>
 </head>
 <body>
@@ -67,6 +478,53 @@
 <audio id="bgm" src="lhIvW.mp3"></audio>
 
 <div id="screen"></div>
+<div id="memo-layer"></div>
+<div id="memo-hint">
+    빈 공간 클릭 → 메모 작성 버튼 표시
+</div>
+
+<!-- 메모 작성/수정 모달 -->
+<div id="memo-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+        <div class="modal-header">
+            <span class="modal-title" id="memo-modal-title">메모 작성</span>
+            <button class="modal-close" type="button" data-action="close" aria-label="닫기">✕</button>
+        </div>
+        <form id="memo-form" class="modal-body">
+            <label>
+                작성자 (비우면 익명)
+                <input id="memo-author" name="author" placeholder="산타, 루돌프 등" autocomplete="off" />
+            </label>
+            <label>
+                메모 내용
+                <textarea id="memo-content" name="content" placeholder="크리스마스 인사를 남겨보세요"></textarea>
+            </label>
+            <div class="modal-actions">
+                <button type="button" class="modal-btn secondary" data-action="cancel">취소</button>
+                <button type="submit" class="modal-btn primary" data-action="submit">저장</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 삭제 확인 모달 -->
+<div id="confirm-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+        <div class="modal-header">
+            <span class="modal-title">메모 삭제</span>
+            <button class="modal-close" type="button" data-action="close-confirm" aria-label="닫기">✕</button>
+        </div>
+        <div class="modal-body" style="color:#fddede;">
+            정말로 이 메모를 삭제할까요?
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="modal-btn secondary" data-action="cancel-confirm">취소</button>
+            <button type="button" class="modal-btn primary" data-action="ok-confirm">삭제</button>
+        </div>
+    </div>
+</div>
 
 <script>
     // 61은 홀수이므로 30번 인덱스가 정확한 정중앙이 됩니다.
@@ -91,6 +549,34 @@
     let snow = [];
     let ground = new Array(width).fill(1);
     let star_pulse = 0;
+
+    // --- Performance Optimization Start ---
+    const cells = [];
+    const currentRender = new Array(width * height).fill(null);
+    let isGridInitialized = false;
+
+    function initGrid() {
+        if (isGridInitialized) return;
+        
+        const screen = document.getElementById('screen');
+        if (!screen) return;
+        
+        screen.innerHTML = '';
+        const fragment = document.createDocumentFragment();
+        
+        for (let i = 0; i < width * height; i++) {
+            const div = document.createElement('div');
+            div.className = 'char';
+            fragment.appendChild(div);
+            cells.push(div);
+            // Initialize cache with empty values
+            currentRender[i] = { char: '', color: '' };
+        }
+        
+        screen.appendChild(fragment);
+        isGridInitialized = true;
+    }
+    // --- Performance Optimization End ---
 
     function createFlake() {
         return {
@@ -117,6 +603,11 @@
     }
 
     function draw() {
+        if (!isGridInitialized) {
+            initGrid();
+            if (!isGridInitialized) return; 
+        }
+
         // 1. 버퍼 초기화 (공백)
         let buffer = Array.from({ length: height }, () => 
             Array(width).fill(' ')
@@ -165,28 +656,40 @@
             }
         });
 
-        // 4. 그리드 방식으로 렌더링 (태그 간 공백 발생 원천 차단)
-        const screen = document.getElementById('screen');
-        let htmlContent = "";
+        // 4. 최적화된 렌더링: 변경된 부분만 DOM 업데이트
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const char = buffer[y][x];
                 const color = colorBuffer[y][x];
-                htmlContent += `<div class="char" style="color:${color}">${char}</div>`;
+                const index = y * width + x;
+                
+                const cached = currentRender[index];
+                const cell = cells[index];
+
+                if (cached.char !== char) {
+                    cell.textContent = char;
+                    cached.char = char;
+                }
+                
+                if (cached.color !== color) {
+                    cell.style.color = color;
+                    cached.color = color;
+                }
             }
         }
-        screen.innerHTML = htmlContent;
 
         updateSnow();
         star_pulse++;
     }
 
-    setInterval(draw, 100);
+    initGrid();
+    setInterval(draw, 120);
 
     // 오디오 자동 재생 및 토글 버튼 제어 + 콘솔 아스키 아트
     window.addEventListener('DOMContentLoaded', () => {
         const audio = document.getElementById('bgm');
         const btn = document.getElementById('audio-toggle');
+        const memoLayer = document.getElementById('memo-layer');
 
         if (audio && btn) {
             // 50초부터 시작
@@ -264,8 +767,47 @@
         ].join(";");
 
         console.log(format, antlersStyle, faceStyle, noseStyle, messageStyle);
+        
+        // 컬러풀한 비둘기 메시지
+        const doveMessage = [
+            "%c비둘기를 부르면 ",
+            "%c소원을 들어줘요 ",
+            "%c999 ",
+            "%c🕊️🕊️🕊️"
+        ].join("");
+        
+        const doveStyle1 = [
+            "color:#FF6B9D",
+            "font-family: monospace",
+            "font-size:14px",
+            "font-weight:bold"
+        ].join(";");
+        
+        const doveStyle2 = [
+            "color:#4ECDC4",
+            "font-family: monospace",
+            "font-size:14px",
+            "font-weight:bold"
+        ].join(";");
+        
+        const doveStyle3 = [
+            "color:#FFE66D",
+            "font-family: monospace",
+            "font-size:16px",
+            "font-weight:bold"
+        ].join(";");
+        
+        const doveStyle4 = [
+            "color:#95E1D3",
+            "font-family: monospace",
+            "font-size:16px",
+            "font-weight:bold"
+        ].join(";");
+        
+        console.log(doveMessage, doveStyle1, doveStyle2, doveStyle3, doveStyle4);
     });
 </script>
+<script src="memo.js"></script>
 
 </body>
 </html>
