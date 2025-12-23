@@ -150,8 +150,11 @@
 
   // 작성 툴팁 관련 변수 및 함수
   let createTooltip = null;
+  let tooltipTargetPos = { x: 0, y: 0 };
   
   function showCreateTooltip(x, y) {
+    tooltipTargetPos = { x, y };
+
     if (!createTooltip) {
       createTooltip = document.createElement('div');
       createTooltip.className = 'create-btn-tooltip';
@@ -165,7 +168,7 @@
       const textSpan = createTooltip.querySelector('.tooltip-text');
       textSpan.addEventListener('click', (e) => {
         e.stopPropagation();
-        openMemoModal('create', null, { x, y });
+        openMemoModal('create', null, tooltipTargetPos);
         hideCreateTooltip();
       });
       
