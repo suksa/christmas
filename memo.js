@@ -207,6 +207,7 @@
     const totalCount = count || 0;
     const batchSize = 30;
     memoState = [];
+    memoLayer.innerHTML = '';
 
     // 5개씩 순차적으로 불러오기
     for (let offset = 0; offset < totalCount; offset += batchSize) {
@@ -223,8 +224,8 @@
 
       if (data && data.length > 0) {
         memoState.push(...data);
-        // 각 배치마다 렌더링 (점진적 표시)
-        renderMemos();
+        // 각 배치마다 새로 추가된 메모만 렌더링
+        data.forEach(memo => addMemoEl(memo));
         // 다음 배치 로드 전 약간의 딜레이 (너무 빠르면 부하)
         if (offset + batchSize < totalCount) {
           await new Promise(resolve => setTimeout(resolve, 50));
