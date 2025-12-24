@@ -210,6 +210,8 @@
             pointer-events: auto;
             cursor: grab;
             user-select: text;
+            touch-action: none; /* 모바일 드래그를 위한 기본 터치 동작 비활성화 */
+            -webkit-user-select: text;
             backdrop-filter: blur(3px);
             overflow: visible; /* 눈 장식이 보이도록 */
             z-index: 200;
@@ -884,7 +886,7 @@
         }
     });
 </script>
-<script src="memo.js?v=20241224_4"></script>
+<script src="memo.js?v=20241224_5"></script>
 
 </body>
 </html>

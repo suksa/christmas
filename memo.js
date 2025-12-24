@@ -337,8 +337,14 @@
     let dragging = false;
     let offsetX = 0;
     let offsetY = 0;
+    let currentPointerId = null;
 
-    el.addEventListener('pointerdown', (e) => {
+    // 터치/포인터 시작
+    const handleStart = (e) => {
+      // 버튼 클릭은 무시
+      if (e.target.closest('.memo-btn')) return;
+      
+      const touch = e.touches ? e.touches[0] : e;
       // 툴팁 숨기기
       hideCreateTooltip();
       dragging = true;
@@ -354,24 +360,51 @@
         el.style.transform = originalTransform ? `${originalTransform} scale(1.05)` : 'scale(1.05)';
       }
       const layerRect = memoLayer.getBoundingClientRect();
-      offsetX = e.clientX - el.getBoundingClientRect().left;
-      offsetY = e.clientY - el.getBoundingClientRect().top;
-      el.setPointerCapture(e.pointerId);
-    });
+      const elRect = el.getBoundingClientRect();
+      offsetX = touch.clientX - elRect.left;
+      offsetY = touch.clientY - elRect.top;
+      
+      if (e.pointerId !== undefined) {
+        currentPointerId = e.pointerId;
+        el.setPointerCapture(e.pointerId);
+      }
+      
+      // 모바일에서 기본 터치 동작 방지
+      if (e.touches) {
+        e.preventDefault();
+      }
+    };
 
-    el.addEventListener('pointermove', (e) => {
+    // 터치/포인터 이동
+    const handleMove = (e) => {
       if (!dragging) return;
+      
+      const touch = e.touches ? e.touches[0] : e;
+      // 포인터 이벤트인 경우 해당 포인터만 처리
+      if (e.pointerId !== undefined && currentPointerId !== null && e.pointerId !== currentPointerId) return;
+      
       const layerRect = memoLayer.getBoundingClientRect();
-      let xP = ((e.clientX - layerRect.left - offsetX) / layerRect.width) * 100;
-      let yP = ((e.clientY - layerRect.top - offsetY) / layerRect.height) * 100;
+      let xP = ((touch.clientX - layerRect.left - offsetX) / layerRect.width) * 100;
+      let yP = ((touch.clientY - layerRect.top - offsetY) / layerRect.height) * 100;
       // 경계 보정 적용
       const constrained = constrainMemoPosition(el, xP, yP);
       el.style.left = `calc(${constrained.x}% )`;
       el.style.top = `calc(${constrained.y}% )`;
-    });
+      
+      // 모바일에서 기본 터치 동작 방지
+      if (e.touches) {
+        e.preventDefault();
+      }
+    };
 
-    el.addEventListener('pointerup', async (e) => {
+    // 터치/포인터 종료
+    const handleEnd = async (e) => {
       if (!dragging) return;
+      
+      const touch = e.changedTouches ? e.changedTouches[0] : e;
+      // 포인터 이벤트인 경우 해당 포인터만 처리
+      if (e.pointerId !== undefined && currentPointerId !== null && e.pointerId !== currentPointerId) return;
+      
       // 툴팁 숨기기 (드래그 끝났을 때 툴팁 뜨는거 방지)
       setTimeout(() => hideCreateTooltip(), 10); 
       dragging = false;
@@ -379,16 +412,33 @@
       // 원래 transform 복원
       const originalTransform = el.dataset.originalTransform || '';
       el.style.transform = originalTransform;
-      el.releasePointerCapture(e.pointerId);
+      
+      if (currentPointerId !== null) {
+        el.releasePointerCapture(currentPointerId);
+        currentPointerId = null;
+      }
+      
       const layerRect = memoLayer.getBoundingClientRect();
-      let xP = ((e.clientX - layerRect.left - offsetX) / layerRect.width) * 100;
-      let yP = ((e.clientY - layerRect.top - offsetY) / layerRect.height) * 100;
+      let xP = ((touch.clientX - layerRect.left - offsetX) / layerRect.width) * 100;
+      let yP = ((touch.clientY - layerRect.top - offsetY) / layerRect.height) * 100;
       // 경계 보정 적용
       const constrained = constrainMemoPosition(el, xP, yP);
       el.style.left = `calc(${constrained.x}% )`;
       el.style.top = `calc(${constrained.y}% )`;
       await updateMemoPosition(memo.id, constrained.x, constrained.y);
-    });
+    };
+
+    // 포인터 이벤트 (데스크톱 + 모바일)
+    el.addEventListener('pointerdown', handleStart);
+    document.addEventListener('pointermove', handleMove);
+    document.addEventListener('pointerup', handleEnd);
+    document.addEventListener('pointercancel', handleEnd);
+
+    // 터치 이벤트 (모바일 추가 지원)
+    el.addEventListener('touchstart', handleStart, { passive: false });
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd);
+    document.addEventListener('touchcancel', handleEnd);
 
     // 더블클릭 이벤트 제거 (수정 불가)
     /*
@@ -486,8 +536,26 @@
     }
     // 위치 px → % 변환 (소수점 2자리)
     let layerRect = memoLayer.getBoundingClientRect();
-    let xP = roundPos(Math.min(Math.max(((pendingPosition.x - layerRect.left ) / layerRect.width) * 100, 0), 99));
-    let yP = roundPos(Math.min(Math.max(((pendingPosition.y - layerRect.top ) / layerRect.height) * 100, 0), 99));
+    let xP, yP;
+    
+    // 모바일 감지 (600px 이하)
+    const isMobile = window.innerWidth <= 600;
+    
+    if (isMobile && currentMode === 'create') {
+      // 모바일: 중앙 기준 랜덤 위치 생성
+      // 중앙(50%) 기준으로 ±20% 범위 내 랜덤 위치
+      const centerX = 50;
+      const centerY = 45; // 약간 위쪽 중앙
+      const randomOffsetX = (Math.random() - 0.5) * 40; // -20% ~ +20%
+      const randomOffsetY = (Math.random() - 0.5) * 40; // -20% ~ +20%
+      xP = roundPos(Math.max(10, Math.min(90, centerX + randomOffsetX)));
+      yP = roundPos(Math.max(10, Math.min(90, centerY + randomOffsetY)));
+    } else {
+      // 데스크톱: 클릭 위치 사용
+      xP = roundPos(Math.min(Math.max(((pendingPosition.x - layerRect.left ) / layerRect.width) * 100, 0), 99));
+      yP = roundPos(Math.min(Math.max(((pendingPosition.y - layerRect.top ) / layerRect.height) * 100, 0), 99));
+    }
+    
     if (currentMode === 'create') {
       await createMemo(content, author, { x: xP, y: yP });
     }
