@@ -7,6 +7,16 @@
   const nicknamePattern = /^[a-zA-Z0-9가-힣 _-]{1,16}$/;
   const xssPattern = /<|>|script|onerror|img|iframe|svg|onload|javascript:/gi;
 
+  // 얼굴 이모지 리스트
+  const faceEmojis = ['😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '😎', '🤓', '🧐', '🤠', '🥳', '😮', '😯', '😲', '😳', '🥺', '😦', '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣', '😞', '😟', '😤', '😢', '😭', '😱', '😨', '😰'];
+
+  // 사용자 ID 기반 일관된 이모지 선택
+  function getEmojiForUser(userId) {
+    if (!userId) return '👤';
+    const hash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return faceEmojis[hash % faceEmojis.length];
+  }
+
   function roundPos(v) {
     return Math.round(v * 100) / 100;
   }
@@ -65,6 +75,7 @@
   const modalCancelBtn = memoModal?.querySelector('[data-action="cancel"]');
 
   let supabaseClient = null;
+  let presenceChannel = null;
   let memoState = [];
   let currentMode = 'create';
   let currentMemo = null;
@@ -82,6 +93,16 @@
     bindGlobalEvents();
     loadMemos();
     subscribeMemos(); // 실시간 구독 시작
+    
+    // 초기 접속자 표시 (자신)
+    const userId = getUserId();
+    const userEmoji = getEmojiForUser(userId);
+    const usersListEl = document.getElementById('online-users-list');
+    if (usersListEl) {
+      usersListEl.innerHTML = `<span class="online-user-emoji" data-user-id="${userId}">${userEmoji}</span>`;
+    }
+    
+    subscribePresence(); // 실시간 접속자 추적 시작
   }
 
   function subscribeMemos() {
@@ -622,5 +643,116 @@
       }
     });
   }
+
+  // 실시간 접속자 추적
+  // let presenceChannel = null; // 상단으로 이동됨
+  // const onlineUsers = new Map(); // 사용 안함
+
+  // 고유한 사용자 ID 생성 (세션 기반)
+  function getUserId() {
+    let userId = sessionStorage.getItem('user_id');
+    if (!userId) {
+      userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      sessionStorage.setItem('user_id', userId);
+    }
+    return userId;
+  }
+
+  function subscribePresence() {
+    const userId = getUserId();
+    const userEmoji = getEmojiForUser(userId);
+
+    console.log('Presence 구독 시작:', userId);
+
+    presenceChannel = supabaseClient.channel('online-users', {
+      config: {
+        presence: {
+          key: userId,
+        },
+      },
+    });
+
+    const updateUI = () => {
+      const state = presenceChannel.presenceState();
+      console.log('Presence 상태 변경:', state);
+      updateOnlineUsersUI(state);
+    };
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, updateUI)
+      .on('presence', { event: 'join' }, updateUI)
+      .on('presence', { event: 'leave' }, updateUI)
+      .subscribe(async (status) => {
+        console.log('Presence 구독 상태:', status);
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({
+            user_id: userId,
+            emoji: userEmoji,
+            online_at: new Date().toISOString(),
+          });
+          // 상태 업데이트 보장
+          setTimeout(updateUI, 100);
+        }
+      });
+  }
+
+  function updateOnlineUsersUI(state) {
+    const usersListEl = document.getElementById('online-users-list');
+    if (!usersListEl) return;
+
+    const currentUserId = getUserId();
+    const allUsers = [];
+
+    // 1. 수신된 접속자 데이터 처리
+    if (state && typeof state === 'object') {
+      for (const key in state) {
+        const presences = state[key];
+        if (presences && Array.isArray(presences) && presences.length > 0) {
+          // 가장 최근 presence 사용
+          const presence = presences[0];
+          // emoji가 없으면 ID 기반으로 생성 (폴백)
+          const emoji = presence.emoji || getEmojiForUser(presence.user_id || key);
+          
+          allUsers.push({
+            userId: key,
+            emoji: emoji,
+            isMe: key === currentUserId
+          });
+        }
+      }
+    }
+
+    // 2. 나 자신이 리스트에 없으면 강제 추가 (연결 지연 시에도 즉시 표시)
+    const isMeIncluded = allUsers.some(u => u.userId === currentUserId);
+    if (!isMeIncluded) {
+      allUsers.push({
+        userId: currentUserId,
+        emoji: getEmojiForUser(currentUserId),
+        isMe: true
+      });
+    }
+
+    // 3. 중복 제거 (userId 기준)
+    const uniqueUsers = Array.from(new Map(allUsers.map(u => [u.userId, u])).values());
+    
+    // 4. 내 것을 맨 앞으로 정렬
+    uniqueUsers.sort((a, b) => {
+      if (a.userId === currentUserId) return -1;
+      if (b.userId === currentUserId) return 1;
+      return 0;
+    });
+
+    // 5. 렌더링
+    usersListEl.innerHTML = uniqueUsers
+      .map(user => `<span class="online-user-emoji" data-user-id="${user.userId}" title="${user.isMe ? '나' : ''}">${user.emoji}</span>`)
+      .join('');
+  }
+
+  // 페이지 언로드 시 Presence 정리
+  window.addEventListener('beforeunload', () => {
+    if (presenceChannel) {
+      presenceChannel.unsubscribe();
+    }
+  });
 })();
 

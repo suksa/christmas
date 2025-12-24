@@ -182,6 +182,58 @@
             box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
         }
 
+        /* 실시간 접속자 표시 */
+        #online-users {
+            position: fixed;
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            z-index: 1001;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(2px);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            pointer-events: none;
+        }
+
+        #online-users-label {
+            font-size: 11px;
+            opacity: 0.8;
+        }
+
+        #online-users-list {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+
+        .online-user-emoji {
+            font-size: 18px;
+            display: inline-block;
+            animation: popIn 0.3s ease-out;
+        }
+
+        @media (max-width: 600px) {
+            #online-users {
+                font-size: 10px;
+                padding: 5px 10px;
+                top: 4px;
+            }
+            #online-users-label {
+                font-size: 10px;
+            }
+            .online-user-emoji {
+                font-size: 16px;
+            }
+        }
+
         .memo {
             position: absolute;
             min-width: 140px;
@@ -548,6 +600,10 @@
 <div id="memo-hint">
     빈 공간 클릭 → 메모 작성 버튼 표시
 </div>
+<div id="online-users">
+    <span id="online-users-label">접속자:</span>
+    <span id="online-users-list"></span>
+</div>
 
 <!-- 메모 작성/수정 모달 -->
 <div id="memo-modal" class="modal hidden" aria-hidden="true">
@@ -886,7 +942,7 @@
         }
     });
 </script>
-<script src="memo.js?v=20241224_5"></script>
+<script src="memo.js?v=20241224_8"></script>
 
 </body>
 </html>
