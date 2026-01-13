@@ -584,17 +584,116 @@
     closeMemoModal();
   }
 
+  // 도배 방지: 사용자별 1분에 최대 3개 제한
+  // Supabase PostgreSQL 함수를 사용하여 서버 측에서 처리
+  async function checkRateLimit(author) {
+    const userId = getUserId();
+    
+    // 1. 클라이언트 측 빠른 체크 (UX 개선용)
+    const now = Date.now();
+    const oneMinuteAgo = now - 60 * 1000;
+    const recentWrites = JSON.parse(localStorage.getItem('memo_writes') || '[]');
+    const validWrites = recentWrites.filter(timestamp => timestamp > oneMinuteAgo);
+    
+    if (validWrites.length >= 3) {
+      return false; // 이미 3개 이상 작성함
+    }
+    
+    // 2. Supabase RPC 함수로 서버 측 체크 (정확성 보장)
+    try {
+      const { data, error } = await supabaseClient.rpc('check_memo_rate_limit', {
+        p_user_id: userId,
+        p_author: author || '익명'
+      });
+      
+      if (error) {
+        // RPC 함수가 없는 경우 폴백: 직접 쿼리
+        console.warn('RPC 함수 없음, 직접 쿼리로 체크:', error.message);
+        const oneMinuteAgoISO = new Date(oneMinuteAgo).toISOString();
+        
+        // user_id 컬럼이 있는 경우
+        const { count: countWithUserId, error: errorWithUserId } = await supabaseClient
+          .from('memos')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .gte('created_at', oneMinuteAgoISO);
+        
+        if (!errorWithUserId && countWithUserId !== null) {
+          return countWithUserId < 3;
+        } else {
+          // user_id 컬럼이 없는 경우, 작성자 이름으로 대체 체크
+          const authorName = author || '익명';
+          const { count: countByAuthor, error: errorByAuthor } = await supabaseClient
+            .from('memos')
+            .select('*', { count: 'exact', head: true })
+            .eq('author', authorName)
+            .gte('created_at', oneMinuteAgoISO);
+          
+          if (!errorByAuthor && countByAuthor !== null) {
+            return countByAuthor < 3;
+          }
+        }
+        // 에러 발생 시 클라이언트 측 체크 결과 사용
+        return validWrites.length < 3;
+      }
+      
+      // RPC 함수가 정상적으로 작동하는 경우
+      return data === true;
+    } catch (error) {
+      console.error('도배 방지 체크 실패', error);
+      // 에러 발생 시 클라이언트 측 체크 결과 사용
+      return validWrites.length < 3;
+    }
+  }
+  
+  // 로컬 스토리지에 작성 시간 기록
+  function recordMemoWrite() {
+    const recentWrites = JSON.parse(localStorage.getItem('memo_writes') || '[]');
+    const now = Date.now();
+    const oneMinuteAgo = now - 60 * 1000;
+    
+    // 1분 이전 기록 제거
+    const validWrites = recentWrites.filter(timestamp => timestamp > oneMinuteAgo);
+    validWrites.push(now);
+    
+    localStorage.setItem('memo_writes', JSON.stringify(validWrites));
+  }
+
   async function createMemo(content, author, position) {
+    // 도배 방지 체크
+    const canCreate = await checkRateLimit(author);
+    if (!canCreate) {
+      const errorMsg = '1분에 최대 3개의 메모만 작성할 수 있습니다. 잠시 후 다시 시도해주세요.';
+      memoWarnSpan.innerText = errorMsg;
+      memoWarnSpan.style.display = 'block';
+      contentInput.focus();
+      return;
+    }
+
+    const userId = getUserId();
     const { data, error } = await supabaseClient
       .from('memos')
-      .insert({ content, author, pos_x: roundPos(position.x), pos_y: roundPos(position.y) })
+      .insert({ 
+        content, 
+        author, 
+        pos_x: roundPos(position.x), 
+        pos_y: roundPos(position.y),
+        user_id: userId // 사용자 ID 저장
+      })
       .select()
       .single();
 
     if (error) {
       console.error('메모 생성 실패', error.message);
+      // 에러 메시지 표시
+      memoWarnSpan.innerText = '메모 생성에 실패했습니다. 다시 시도해주세요.';
+      memoWarnSpan.style.display = 'block';
       return;
     }
+    
+    // 작성 성공 시 로컬 스토리지에 기록
+    recordMemoWrite();
+    
     // INSERT 이벤트가 오므로 여기서 직접 추가할 필요 없음(중복 방지)
     // 하지만 빠른 반응성을 위해 낙관적 업데이트를 하거나, 
     // 리얼타임 구독으로 들어올 때 id 중복체크로 막으면 됨.
